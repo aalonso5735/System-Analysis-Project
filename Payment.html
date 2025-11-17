@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tammy's Bar & Grille - Payment</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+    .status {
+      font-size: 0.9rem;
+      color: green;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 15px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #f4f4f4;
+    }
+    .summary-row {
+      font-weight: bold;
+    }
+    .tip-buttons button {
+      margin-right: 8px;
+      margin-bottom: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    .payment-methods label {
+      margin-right: 15px;
+    }
+    .buttons {
+      margin-top: 15px;
+    }
+    button {
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+    .message {
+      margin-top: 15px;
+      font-weight: bold;
+      color: green;
+    }
+    .error {
+      color: red;
+      font-weight: normal;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Tammy's Bar & Grille POS - Payment</h1>
+    <div class="status">Status: Connected</div>
+  </header>
+
+  <h2>Order Summary</h2>
+  <div id="orderContainer"></div>
+
+  <h3>Tip</h3>
+  <div class="tip-buttons">
+    <button type="button" data-tip="0.10">10%</button>
+    <button type="button" data-tip="0.15">15%</button>
+    <button type="button" data-tip="0.20">20%</button>
+    <label>
+      Other: $
+      <input type="number" id="customTip" min="0" step="0.01" style="width:80px;" />
+    </label>
+  </div>
+
+  <h3>Payment Method</h3>
+  <div class="payment-methods">
+    <label><input type="radio" name="paymentMethod" value="Card" /> Card</label>
+    <label><input type="radio" name="paymentMethod" value="Cash" /> Cash</label>
+    <label><input type="radio" name="paymentMethod" value="Split" /> Split Payment</label>
+  </div>
+
+  <h3>Total with Tip</h3>
+  <p id="grandTotalDisplay">$0.00</p>
+
+  <div class="buttons">
+    <button id="completePaymentBtn">Complete Payment</button>
+    <button type="button" onclick="goBack()">Go Back to Order</button>
+  </div>
+
+  <div class="message" id="message"></div>
+
+  <script>
+    let currentOrder = null;
+    let selectedTipAmount = 0;
+
+    function formatMoney(value) {
+      return '$' + value.toFixed(2);
+    }
+
+    function loadOrder() {
+      const container = document.getElementById('orderContainer');
+      const stored = localStorage.getItem('currentOrder');
+
+      if (!stored) {
+        container.innerHTML = '<p class="error">No order found. Please go back and create an order.</p>';
+        return;
+      }
+
+      currentOrder = JSON.parse(stored);
+
+      let html = '<table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Line Total</th></tr></thead><tbody>';
+      currentOrder.items.forEach(item => {
+        html += `<tr>
+          <td>${item.name}</td>
+          <td>${item.quantity}</td>
+          <td>${formatMoney(item.price)}</td>
+          <td>${formatMoney(item.lineTotal)}</td>
+        </tr>`;
+      });
+      html += `</tbody>
+        <tfoot>
+          <tr class="summary-row"><td colspan="3">Subtotal</td><td>${formatMoney(currentOrder.subtotal)}</td></tr>
+          <tr class="summary-row"><td colspan="3">Tax</td><td>${formatMoney(currentOrder.tax)}</td></tr>
+          <tr class="summary-row"><td colspan="3">Total</td><td>${formatMoney(currentOrder.total)}</td></tr>
+        </tfoot>
+      </table>`;
+
+      if (currentOrder.note) {
+        html += `<p><strong>Notes:</strong> ${currentOrder.note}</p>`;
+      }
+
+      container.innerHTML = html;
+
+      // Initial grand total (no tip yet)
+      updateGrandTotal();
+    }
+
+    function updateGrandTotal() {
+      if (!currentOrder) return;
+      const grandTotal = currentOrder.total + selectedTipAmount;
+      document.getElementById('grandTotalDisplay').textContent = formatMoney(grandTotal);
+    }
+
+    // Tip buttons
+    document.querySelectorAll('.tip-buttons button[data-tip]').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const tipPercent = parseFloat(this.getAttribute('data-tip'));
+        selectedTipAmount = currentOrder ? currentOrder.total * tipPercent : 0;
+        document.getElementById('customTip').value = '';
+        updateGrandTotal();
+      });
+    });
+
+    // Custom tip
+    document.getElementById('customTip').addEventListener('input', function () {
+      const value = parseFloat(this.value) || 0;
+      selectedTipAmount = value;
+      updateGrandTotal();
+    });
+
+    document.getElementById('completePaymentBtn').addEventListener('click', function () {
+      const messageEl = document.getElementById('message');
+      messageEl.classList.remove('error');
+      messageEl.textContent = '';
+
+      if (!currentOrder) {
+        messageEl.classList.add('error');
+        messageEl.textContent = 'No order loaded. Please go back and create an order.';
+        return;
+      }
+
+      const method = document.querySelector('input[name="paymentMethod"]:checked');
+      if (!method) {
+        messageEl.classList.add('error');
+        messageEl.textContent = 'Please select a payment method.';
+        return;
+      }
+
+      const grandTotal = currentOrder.total + selectedTipAmount;
+
+      // In a real app, you would send this to a server here.
+      // For the prototype, just show a confirmation message.
+      messageEl.classList.remove('error');
+      messageEl.textContent =
+        `Payment successful. Method: ${method.value}. Amount charged: ${formatMoney(grandTotal)}.`;
+
+      // Clear the stored order after "payment"
+      localStorage.removeItem('currentOrder');
+    });
+
+    function goBack() {
+      window.location.href = 'order.html';
+    }
+
+    // Load order when page starts
+    loadOrder();
+  </script>
+</body>
+</html>
